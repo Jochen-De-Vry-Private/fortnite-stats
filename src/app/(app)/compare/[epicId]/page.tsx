@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { FollowButton } from "@/components/follow-button";
 import { HeadToHead } from "@/components/head-to-head";
 import { ButtonLink } from "@/components/ui";
-import { getMyProfile, getPlayer, getRecentGains, isFollowing } from "@/lib/data";
+import { getMyProfile, getPlayer, getWeeklyGains, isFollowing } from "@/lib/data";
 import { isEpicId } from "@/lib/stats";
 import { createAdminClient } from "@/lib/supabase/server";
 import { ensureFresh } from "@/lib/sync";
@@ -31,8 +31,8 @@ export default async function CompareWithPage({ params }: Props) {
 
   const [following, myWeekly, theirWeekly] = await Promise.all([
     isFollowing(epicId),
-    getRecentGains(me.player, 7),
-    getRecentGains(them, 7),
+    getWeeklyGains(me.player),
+    getWeeklyGains(them),
   ]);
 
   return (

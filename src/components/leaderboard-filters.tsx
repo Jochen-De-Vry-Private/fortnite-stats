@@ -82,8 +82,7 @@ export function LeaderboardFilters({
         />
         <Select
           label="Input"
-          value={period === "lifetime" ? input : "all"}
-          disabled={period !== "lifetime"}
+          value={input}
           onChange={(v) => set("input", v)}
           options={(Object.keys(INPUT_LABELS) as Input[]).map((i) => ({ value: i, label: INPUT_LABELS[i] }))}
         />

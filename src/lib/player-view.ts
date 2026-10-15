@@ -1,13 +1,17 @@
 import "server-only";
 import type { StatsViewPlayer } from "@/components/stats-view";
-import { getRecentGains, getSnapshots, type Player } from "./data";
+import { getBaselines, getOverallHistory, type Player } from "./data";
+import { playerBaselines } from "./players";
 import { daysAgo, trendFromSnapshots } from "./stats";
 
 /** Everything the StatsView needs for one player. */
 export async function loadPlayerView(player: Player) {
-  const [snapshots, weekly] = await Promise.all([
-    getSnapshots([player.epic_id], daysAgo(120), "overall"),
-    getRecentGains(player, 7),
+  const ids = [player.epic_id];
+  const [history, week, month, year] = await Promise.all([
+    getOverallHistory(player.epic_id, daysAgo(120)),
+    getBaselines(ids, "7d"),
+    getBaselines(ids, "30d"),
+    getBaselines(ids, "365d"),
   ]);
   const view: StatsViewPlayer = {
     epic_name: player.epic_name,
@@ -17,5 +21,10 @@ export async function loadPlayerView(player: Player) {
     last_synced_at: player.last_synced_at,
     sync_error: player.sync_error,
   };
-  return { player: view, stats: player.latest_stats, trend: trendFromSnapshots(snapshots), weekly };
+  return {
+    player: view,
+    stats: player.latest_stats,
+    trend: trendFromSnapshots(history),
+    baselines: playerBaselines(player.epic_id, { "7d": week, "30d": month, "365d": year }),
+  };
 }

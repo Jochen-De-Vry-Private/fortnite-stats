@@ -23,7 +23,8 @@ import {
 import { useState, type ReactNode } from "react";
 import type { AllStats, Input, Mode, ModeStats } from "@/lib/fortnite/types";
 import { INPUTS, INPUT_LABELS, MODES, MODE_LABELS } from "@/lib/fortnite/types";
-import { fmtInt, timeAgo, type Totals, type TrendPoint } from "@/lib/stats";
+import type { PlayerBaselines } from "@/lib/players";
+import { PERIOD_LABELS, fmtInt, subtractTotals, timeAgo, totalsFromStats, type GainPeriod, type TrendPoint } from "@/lib/stats";
 import { AnimatedNumber } from "./animated-number";
 import { Avatar } from "./avatar";
 import { RankBadge } from "./rank-badge";
@@ -49,13 +50,13 @@ export function StatsView({
   player,
   stats,
   trend,
-  weekly,
+  baselines,
   actions,
 }: {
   player: StatsViewPlayer;
   stats: AllStats | null;
   trend: TrendPoint[];
-  weekly: Totals | null;
+  baselines: PlayerBaselines;
   actions?: ReactNode;
 }) {
   const inputs = INPUTS.filter((i) => stats?.[i]?.overall);
@@ -76,8 +77,6 @@ export function StatsView({
           <b>Show on Career Leaderboard</b>. We&apos;ll pick them up on the next daily update.
         </Notice>
       )}
-
-      {weekly && <WeeklyStrip weekly={weekly} />}
 
       {!s ? (
         <Notice icon={<Target className="size-5" />}>No matches recorded yet. Drop in and come back later!</Notice>
@@ -105,6 +104,8 @@ export function StatsView({
             )}
             <ModeTabs modes={modes} value={mode} onChange={setMode} />
           </div>
+
+          <GainsPanel current={s} baselines={baselines} input={input} mode={mode} />
 
           <motion.div
             key={`${input}-${mode}`}
@@ -165,7 +166,7 @@ function Hero({ player, kd, actions }: { player: StatsViewPlayer; kd: number; ac
         </div>
         <div className="flex items-center gap-4 sm:ml-auto">
           {level !== null && <LevelRing level={level} progress={progress} />}
-          {actions}
+          {actions && <div className="shrink-0">{actions}</div>}
         </div>
       </div>
     </section>
@@ -209,26 +210,84 @@ function LevelRing({ level, progress }: { level: number; progress: number }) {
   );
 }
 
-function WeeklyStrip({ weekly }: { weekly: Totals }) {
-  const items = [
-    { label: "Wins", value: weekly.wins, color: "text-legendary" },
-    { label: "Elims", value: weekly.kills, color: "text-uncommon" },
-    { label: "Matches", value: weekly.matches, color: "text-rare" },
-    { label: "Hours", value: Math.round(weekly.minutesPlayed / 60), color: "text-epic" },
-  ];
+const GAIN_PERIODS: { value: GainPeriod; short: string }[] = [
+  { value: "7d", short: "7 days" },
+  { value: "30d", short: "Month" },
+  { value: "365d", short: "Year" },
+];
+
+function shortDate(iso: string) {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Gains over the chosen period for the selected input + mode. */
+function GainsPanel({
+  current,
+  baselines,
+  input,
+  mode,
+}: {
+  current: ModeStats;
+  baselines: PlayerBaselines;
+  input: Input;
+  mode: Mode;
+}) {
+  const [period, setPeriod] = useState<GainPeriod>("7d");
+  const base = baselines[period][`${input}|${mode}`];
+  const gains = base ? subtractTotals(totalsFromStats(current), base.totals) : null;
+  const kd = gains ? (gains.deaths ? gains.kills / gains.deaths : gains.kills) : 0;
+
+  const items = gains
+    ? [
+        { label: "Wins", value: gains.wins, format: "int" as const, color: "text-legendary", plus: true },
+        { label: "Elims", value: gains.kills, format: "int" as const, color: "text-uncommon", plus: true },
+        { label: "Matches", value: gains.matches, format: "int" as const, color: "text-rare", plus: true },
+        { label: "K/D", value: kd, format: "dec2" as const, color: "text-epic", plus: false },
+      ]
+    : [];
+
   return (
     <section className="rounded-2xl border border-line bg-panel/80 p-4">
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-muted">Last 7 days</h2>
-      <div className="grid grid-cols-4 gap-2 text-center">
-        {items.map((it) => (
-          <div key={it.label}>
-            <div className={clsx("font-display text-2xl sm:text-3xl", it.color)}>
-              +<AnimatedNumber value={it.value} format="int" />
-            </div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{it.label}</div>
-          </div>
-        ))}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted">{PERIOD_LABELS[period]}</h2>
+        <div className="flex gap-1 rounded-full bg-black/30 p-0.5" role="group" aria-label="Period">
+          {GAIN_PERIODS.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              aria-pressed={p.value === period}
+              className={clsx(
+                "rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide transition",
+                p.value === period ? "bg-white text-zinc-950" : "text-muted hover:text-white",
+              )}
+            >
+              {p.short}
+            </button>
+          ))}
+        </div>
       </div>
+      {gains ? (
+        <>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {items.map((it) => (
+              <div key={it.label}>
+                <div className={clsx("font-display text-2xl sm:text-3xl", it.color)}>
+                  {it.plus && "+"}
+                  <AnimatedNumber key={`${period}-${input}-${mode}`} value={it.value} format={it.format} />
+                </div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{it.label}</div>
+              </div>
+            ))}
+          </div>
+          {base?.since && (
+            <p className="mt-3 text-center text-[11px] text-muted">Tracking since {shortDate(base.since)}</p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted">
+          No history for this {input === "all" ? "mode" : "input"} yet. Check back after tomorrow&apos;s update.
+        </p>
+      )}
     </section>
   );
 }

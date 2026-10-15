@@ -135,3 +135,34 @@ export async function signOut() {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+export async function requestPasswordReset(_prev: FormState, formData: FormData): Promise<FormState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { error: "Enter your email address." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${await siteOrigin()}/auth/recovery`,
+  });
+  // Rate limiting is the only error worth showing; anything else would reveal
+  // whether an account exists for this email.
+  if (error?.status === 429) return { error: "Too many reset emails. Wait a few minutes and try again." };
+  if (error) console.error("password reset failed", error);
+  return {
+    message: "If there's an account for that email, a reset link is on its way. Open it on this device.",
+  };
+}
+
+export async function updatePassword(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await getUser();
+  if (!user) return { error: "Your reset link expired. Request a new one." };
+
+  const password = String(formData.get("password") ?? "");
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+  if (password !== String(formData.get("confirm") ?? "")) return { error: "The passwords don't match." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) return { error: error.message };
+  redirect("/dashboard");
+}

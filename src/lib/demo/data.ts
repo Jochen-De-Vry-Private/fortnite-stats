@@ -1,9 +1,9 @@
 // Dummy data for the public /demo pages. Deterministic (seeded random), with
 // dates relative to today so weekly/monthly views always have data.
 import { SAMPLE_STATS } from "../fortnite/sample";
-import type { AllStats, Mode, ModeStats } from "../fortnite/types";
-import { groupByPlayer, recentGains, type Player } from "../players";
-import { daysAgo, totalsFromStats, type SnapshotRow, type Totals } from "../stats";
+import type { AllStats, Input, Mode, ModeStats } from "../fortnite/types";
+import { gainsSince, pickBaselineRows, playerBaselines, toBaselineMap, type BaselineMap, type Player } from "../players";
+import { PERIOD_DAYS, daysAgo, totalsFromSnapshot, totalsFromStats, type GainPeriod, type SnapshotRow, type Totals } from "../stats";
 
 const MODES_SPLIT: Record<Exclude<Mode, "overall">, number> = { solo: 0.15, duo: 0.2, squad: 0.1, ltm: 0.55 };
 const HISTORY_DAYS = 40;
@@ -62,10 +62,11 @@ function dayGain(matchesPerDay: number, skill: number, winRate: number, rand: ()
   };
 }
 
-function snapshotRow(epicId: string, date: string, mode: Mode, t: Totals): SnapshotRow {
+function snapshotRow(epicId: string, date: string, mode: Mode, t: Totals, input: Input = "all"): SnapshotRow {
   return {
     epic_id: epicId,
     snapshot_date: date,
+    input,
     mode,
     score: t.score,
     wins: t.wins,
@@ -150,6 +151,33 @@ function makeMe(): { player: Player; snapshots: SnapshotRow[] } {
     current = Object.fromEntries(modes.map((m) => [m, minus(current[m], gains[m])]));
     currentOverall = minus(currentOverall, modes.reduce((acc, m) => addTotals(acc, gains[m]), totalsFromStats(null)));
   }
+  // Per-input history: each input's share of the all-inputs gains, counted back from its current totals.
+  const allRows = [...snapshots];
+  for (const input of ["keyboardMouse", "gamepad", "touch"] as const) {
+    const inputStats = SAMPLE_STATS.stats[input];
+    if (!inputStats) continue;
+    for (const row of allRows) {
+      const mine = inputStats[row.mode];
+      const allNow = all[row.mode];
+      if (!mine || !allNow) continue;
+      const share = allNow.matches ? mine.matches / allNow.matches : 0;
+      const nowAll = totalsFromStats(allNow);
+      const then = totalsFromSnapshot(row);
+      const mineNow = totalsFromStats(mine);
+      const back = (k: keyof Totals) => Math.max(0, Math.round(mineNow[k] - share * (nowAll[k] - then[k])));
+      snapshots.push(
+        snapshotRow(epicId, row.snapshot_date, row.mode, {
+          score: back("score"),
+          wins: back("wins"),
+          kills: back("kills"),
+          deaths: back("deaths"),
+          matches: back("matches"),
+          minutesPlayed: back("minutesPlayed"),
+          playersOutlived: back("playersOutlived"),
+        }, input),
+      );
+    }
+  }
   snapshots.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
 
   return {
@@ -199,10 +227,18 @@ export function getDemoData() {
     pros: pros.map((p) => p.player),
     groups,
     players,
-    /** Snapshots for one mode, grouped per player and sorted by date. */
-    snapshotsFor: (mode: Mode) => groupByPlayer(snapshotRows.filter((r) => r.mode === mode)),
-    weeklyGains: (p: Player) =>
-      recentGains(p, snapshotRows.filter((r) => r.epic_id === p.epic_id && r.mode === "overall"), 7),
+    snapshotRows,
+    /** Period-start totals for everyone, like the snapshot_baselines database function. */
+    baselines: (period: GainPeriod): BaselineMap => {
+      const cutoff = daysAgo(PERIOD_DAYS[period]);
+      return toBaselineMap(pickBaselineRows(snapshotRows, cutoff), cutoff);
+    },
+    weeklyGains(p: Player) {
+      return gainsSince(p, this.baselines("7d"), "all", "overall");
+    },
+    playerBaselines(p: Player) {
+      return playerBaselines(p.epic_id, { "7d": this.baselines("7d"), "30d": this.baselines("30d"), "365d": this.baselines("365d") });
+    },
   };
 }
 

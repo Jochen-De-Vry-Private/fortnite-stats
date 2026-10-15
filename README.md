@@ -71,7 +71,7 @@ The service worker only runs in production builds (`npm run build && npm start`)
 2. Create the database tables. Either:
    - **SQL editor**: run each file in `supabase/migrations/` **once, in filename order** (paste the contents, click Run), or
    - **CLI**: run `npx supabase link --project-ref <ref>`, then `npx supabase db push`.
-3. **Authentication → URL Configuration**: set **Site URL** to your Vercel URL (e.g. `https://dropstats.vercel.app`) and add `https://dropstats.vercel.app/auth/callback` to **Redirect URLs**.
+3. **Authentication → URL Configuration**: set **Site URL** to your Vercel URL (e.g. `https://dropstats.vercel.app`) and add `https://dropstats.vercel.app/**` to **Redirect URLs**. That covers both the sign-up confirmation link (`/auth/callback`) and the password reset link (`/auth/recovery`).
 4. **Email confirmation**: Supabase's built-in email sender only allows a handful of emails per hour. For a small friends app you can either:
    - turn off **Authentication → Sign In / Providers → Email → Confirm email**, or
    - add a free SMTP provider (e.g. Resend) under **Authentication → Emails → SMTP Settings**.
@@ -93,6 +93,18 @@ The service worker only runs in production builds (`npm run build && npm start`)
    | `NEXT_PUBLIC_SITE_URL` | `https://<your-app>.vercel.app` |
 
 4. Deploy. `vercel.json` registers the daily cron (`/api/cron/sync` at 06:00 UTC), and Vercel sends `CRON_SECRET` with each call automatically.
+
+### Emails (sign-up confirmation, password reset)
+
+Supabase sends these emails, not Vercel. Its built-in sender works out of the box but only allows a few emails per hour, which is enough for testing. For real use, connect a free email provider:
+
+1. Create an account at [resend.com](https://resend.com) (free: 3,000 emails/month). Add and verify a domain you own, then create an API key.
+2. In Supabase, go to **Authentication → Emails → SMTP Settings** and enable custom SMTP:
+   - Host `smtp.resend.com`, port `465`, username `resend`, password = your Resend API key
+   - Sender email: e.g. `noreply@yourdomain.com`; sender name: `DropStats`
+3. Optional: under **Authentication → Emails → Templates**, edit the "Reset password" and "Confirm sign up" emails to match the app.
+
+Reset links must be opened on the same device and browser where the reset was requested.
 
 ### More than ~200 players?
 

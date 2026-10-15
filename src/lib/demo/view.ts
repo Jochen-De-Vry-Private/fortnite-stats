@@ -14,7 +14,9 @@ export function demoView(demo: DemoData, player: Player) {
       sync_error: player.sync_error,
     },
     stats: player.latest_stats,
-    trend: trendFromSnapshots(demo.snapshotsFor("overall").get(player.epic_id) ?? []),
-    weekly: demo.weeklyGains(player),
+    trend: trendFromSnapshots(
+      demo.snapshotRows.filter((r) => r.epic_id === player.epic_id && r.input === "all" && r.mode === "overall"),
+    ),
+    baselines: demo.playerBaselines(player),
   };
 }

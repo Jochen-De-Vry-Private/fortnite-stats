@@ -8,5 +8,5 @@ export function demoLeaderboard(demo: DemoData, memberIds: string[], opts: Leade
     .filter((p) => p !== undefined)
     .map((player) => ({ player, isMe: player.epic_id === demo.me.epic_id }));
   const rows = leaderboardRows(members, opts.showPros ? demo.pros : []);
-  return rankPlayers(rows, demo.snapshotsFor(opts.mode), opts);
+  return rankPlayers(rows, opts.period === "lifetime" ? null : demo.baselines(opts.period), opts);
 }

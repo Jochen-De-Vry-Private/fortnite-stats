@@ -7,9 +7,9 @@ import { isoDate, snapshotRowsFromStats } from "./stats";
 type PlayerForSync = { epic_id: string; latest_stats: AllStats | null };
 
 /**
- * Stores a fresh API response, creating the player row if needed. A snapshot
- * is written only when the overall match count changed (or none exists yet),
- * which keeps the history table small for inactive players.
+ * Stores a fresh API response, creating the player row if needed. Snapshot
+ * rows are written only for input + mode combinations whose match count
+ * changed, which keeps the history table small.
  */
 export async function saveStats(admin: SupabaseClient, previous: AllStats | null, data: FortniteStatsData) {
   const now = new Date();
@@ -28,15 +28,11 @@ export async function saveStats(admin: SupabaseClient, previous: AllStats | null
   );
   if (error) throw error;
 
-  const prevMatches = previous?.all?.overall?.matches;
-  const newMatches = data.stats.all?.overall?.matches;
-  if (prevMatches !== undefined && prevMatches === newMatches) return;
-
-  const rows = snapshotRowsFromStats(epicId, data.stats, isoDate(now));
+  const rows = snapshotRowsFromStats(epicId, data.stats, previous, isoDate(now));
   if (rows.length === 0) return;
   const { error: snapError } = await admin
     .from("stat_snapshots")
-    .upsert(rows, { onConflict: "epic_id,mode,snapshot_date" });
+    .upsert(rows, { onConflict: "epic_id,input,mode,snapshot_date" });
   if (snapError) throw snapError;
 }
 

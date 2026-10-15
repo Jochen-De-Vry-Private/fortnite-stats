@@ -15,6 +15,7 @@ export type Totals = {
 export type SnapshotRow = {
   epic_id: string;
   snapshot_date: string;
+  input: Input;
   mode: Mode;
   score: number;
   wins: number;
@@ -76,17 +77,30 @@ export function getModeStats(stats: AllStats | null | undefined, input: Input, m
   return stats?.[input]?.[mode] ?? null;
 }
 
-/** Snapshot rows to write for a fresh API response (input "all" only). */
-export function snapshotRowsFromStats(epicId: string, stats: AllStats, date: string): SnapshotRow[] {
-  const all = stats.all;
-  if (!all) return [];
-  return (Object.keys(all) as Mode[])
-    .filter((mode) => all[mode])
-    .map((mode) => {
-      const t = totalsFromStats(all[mode]);
-      return {
+/**
+ * Snapshot rows to write for a fresh API response: one per input + mode whose
+ * match count changed since `previous` (or that had no data before).
+ * Unchanged combinations are skipped; their last row still holds the totals.
+ */
+export function snapshotRowsFromStats(
+  epicId: string,
+  stats: AllStats,
+  previous: AllStats | null,
+  date: string,
+): SnapshotRow[] {
+  const rows: SnapshotRow[] = [];
+  for (const input of Object.keys(stats) as Input[]) {
+    const modes = stats[input];
+    if (!modes) continue;
+    for (const mode of Object.keys(modes) as Mode[]) {
+      const current = modes[mode];
+      if (!current) continue;
+      if (previous?.[input]?.[mode]?.matches === current.matches) continue;
+      const t = totalsFromStats(current);
+      rows.push({
         epic_id: epicId,
         snapshot_date: date,
+        input,
         mode,
         score: t.score,
         wins: t.wins,
@@ -95,8 +109,10 @@ export function snapshotRowsFromStats(epicId: string, stats: AllStats, date: str
         matches: t.matches,
         minutes_played: t.minutesPlayed,
         players_outlived: t.playersOutlived,
-      };
-    });
+      });
+    }
+  }
+  return rows;
 }
 
 export function isoDate(d: Date) {
@@ -107,21 +123,6 @@ export function daysAgo(n: number) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   return isoDate(d);
-}
-
-/**
- * Totals at the start of a period: the last snapshot on or before the cutoff,
- * or (for players who joined later) their first snapshot.
- * `rows` must be one player + one mode, sorted by date ascending.
- */
-export function baselineFor(rows: SnapshotRow[], cutoff: string): Totals | null {
-  if (rows.length === 0) return null;
-  let base = rows[0];
-  for (const r of rows) {
-    if (r.snapshot_date <= cutoff) base = r;
-    else break;
-  }
-  return totalsFromSnapshot(base);
 }
 
 export type TrendPoint = { date: string; wins: number; kills: number; matches: number; kd: number };
@@ -151,15 +152,17 @@ export function timeAgo(iso: string | null) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export type Period = "lifetime" | "7d" | "30d";
+export type Period = "lifetime" | "7d" | "30d" | "365d";
+export type GainPeriod = Exclude<Period, "lifetime">;
 
 export const PERIOD_LABELS: Record<Period, string> = {
   lifetime: "Lifetime",
-  "7d": "This week",
-  "30d": "This month",
+  "7d": "Last 7 days",
+  "30d": "Last month",
+  "365d": "Last year",
 };
 
-export const PERIOD_DAYS: Record<Exclude<Period, "lifetime">, number> = { "7d": 7, "30d": 30 };
+export const PERIOD_DAYS: Record<GainPeriod, number> = { "7d": 7, "30d": 30, "365d": 365 };
 
 export type MetricKey =
   | "wins"

@@ -1,17 +1,17 @@
 import "server-only";
 import { cache } from "react";
 import { createClient, getUser } from "./supabase/server";
-import type { Mode } from "./fortnite/types";
 import {
-  groupByPlayer,
+  gainsSince,
   leaderboardRows,
   rankPlayers,
-  recentGains,
+  toBaselineMap,
+  type BaselineMap,
   type LeaderboardEntry,
   type LeaderboardOptions,
   type Player,
 } from "./players";
-import { daysAgo, type SnapshotRow } from "./stats";
+import { PERIOD_DAYS, daysAgo, type GainPeriod, type SnapshotRow } from "./stats";
 
 export type { LeaderboardEntry, Player, PublicPlayer } from "./players";
 
@@ -74,26 +74,29 @@ export async function searchAppUsers(q: string, excludeId: string): Promise<Prof
   return ((data ?? []) as unknown as Profile[]).sort((a, b) => a.player.epic_name.localeCompare(b.player.epic_name));
 }
 
-export async function getSnapshots(epicIds: string[], since: string, mode?: Mode): Promise<SnapshotRow[]> {
-  if (epicIds.length === 0) return [];
+/** Overall, all-inputs history, used for the progress chart. */
+export async function getOverallHistory(epicId: string, since: string): Promise<SnapshotRow[]> {
   const supabase = await createClient();
-  let query = supabase
+  const { data } = await supabase
     .from("stat_snapshots")
     .select("*")
-    .in("epic_id", epicIds)
+    .eq("epic_id", epicId)
+    .eq("input", "all")
+    .eq("mode", "overall")
     .gte("snapshot_date", since)
     .order("snapshot_date", { ascending: true })
-    .limit(10000);
-  if (mode) query = query.eq("mode", mode);
-  const { data } = await query;
+    .limit(1000);
   return (data ?? []) as SnapshotRow[];
 }
 
-/** Snapshots per player, sorted by date. Enough history to find each player's totals at a period cutoff. */
-export async function getSnapshotsForPeriod(epicIds: string[], mode: Mode) {
-  // Snapshots are written only on active days, so look back well past the
-  // cutoff to find each player's baseline.
-  return groupByPlayer(await getSnapshots(epicIds, daysAgo(400), mode));
+/** Period-start totals for every input + mode of the given players. */
+export async function getBaselines(epicIds: string[], period: GainPeriod): Promise<BaselineMap> {
+  if (epicIds.length === 0) return new Map();
+  const cutoff = daysAgo(PERIOD_DAYS[period]);
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("snapshot_baselines", { epic_ids: epicIds, cutoff });
+  if (error) throw error;
+  return toBaselineMap((data ?? []) as SnapshotRow[], cutoff);
 }
 
 export type Friendship = {
@@ -197,18 +200,17 @@ export async function buildLeaderboard(
     profiles.map((p) => ({ player: p.player, isMe: p.id === opts.meId })),
     opts.pros,
   );
-  const snapshots =
+  const baselines =
     opts.period === "lifetime"
-      ? new Map<string, SnapshotRow[]>()
-      : await getSnapshotsForPeriod(
+      ? null
+      : await getBaselines(
           rows.map((r) => r.player.epic_id),
-          opts.mode,
+          opts.period,
         );
-  return rankPlayers(rows, snapshots, opts);
+  return rankPlayers(rows, baselines, opts);
 }
 
-/** Gains over the last `days` days for one player (overall, all inputs). */
-export async function getRecentGains(player: Player, days: number) {
-  const rows = await getSnapshotsForPeriod([player.epic_id], "overall");
-  return recentGains(player, rows.get(player.epic_id) ?? [], days);
+/** Gains over the last 7 days for one player (overall, all inputs). */
+export async function getWeeklyGains(player: Player) {
+  return gainsSince(player, await getBaselines([player.epic_id], "7d"), "all", "overall");
 }
