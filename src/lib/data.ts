@@ -1,32 +1,19 @@
 import "server-only";
 import { cache } from "react";
 import { createClient, getUser } from "./supabase/server";
-import type { AllStats, Input, Mode } from "./fortnite/types";
+import type { Mode } from "./fortnite/types";
 import {
-  METRICS,
-  PERIOD_DAYS,
-  baselineFor,
-  daysAgo,
-  getModeStats,
-  subtractTotals,
-  totalsFromStats,
-  type MetricKey,
-  type Period,
-  type SnapshotRow,
-  type Totals,
-} from "./stats";
+  groupByPlayer,
+  leaderboardRows,
+  rankPlayers,
+  recentGains,
+  type LeaderboardEntry,
+  type LeaderboardOptions,
+  type Player,
+} from "./players";
+import { daysAgo, type SnapshotRow } from "./stats";
 
-/** Any Fortnite account the app knows about (app users, followed pros, looked-up players). */
-export type Player = {
-  epic_id: string;
-  epic_name: string;
-  avatar_hue: number;
-  battle_pass_level: number | null;
-  battle_pass_progress: number | null;
-  latest_stats: AllStats | null;
-  last_synced_at: string | null;
-  sync_error: string | null;
-};
+export type { LeaderboardEntry, Player, PublicPlayer } from "./players";
 
 /** An app account and the player it's linked to. */
 export type Profile = {
@@ -35,8 +22,6 @@ export type Profile = {
   invite_code: string;
   player: Player;
 };
-
-export type PublicPlayer = Pick<Player, "epic_id" | "epic_name" | "avatar_hue">;
 
 const PLAYER_COLUMNS =
   "epic_id, epic_name, avatar_hue, battle_pass_level, battle_pass_progress, latest_stats, last_synced_at, sync_error";
@@ -102,16 +87,6 @@ export async function getSnapshots(epicIds: string[], since: string, mode?: Mode
   if (mode) query = query.eq("mode", mode);
   const { data } = await query;
   return (data ?? []) as SnapshotRow[];
-}
-
-export function groupByPlayer(rows: SnapshotRow[]) {
-  const map = new Map<string, SnapshotRow[]>();
-  for (const r of rows) {
-    const list = map.get(r.epic_id);
-    if (list) list.push(r);
-    else map.set(r.epic_id, [r]);
-  }
-  return map;
 }
 
 /** Snapshots per player, sorted by date. Enough history to find each player's totals at a period cutoff. */
@@ -209,68 +184,31 @@ export async function getGroup(id: string) {
   return { group: group as Group, memberIds: (members ?? []).map((m) => m.profile_id as string) };
 }
 
-export type LeaderboardKind = "me" | "member" | "pro";
-
-export type LeaderboardEntry = {
-  player: PublicPlayer;
-  kind: LeaderboardKind;
-  value: number;
-  totals: Totals;
-  hasData: boolean;
-};
-
 /**
  * Ranks app users (by profile id) plus optional extra players (followed pros)
  * on one metric. Players appearing in both lists are counted once.
  */
 export async function buildLeaderboard(
   profileIds: string[],
-  opts: { metric: MetricKey; mode: Mode; input: Input; period: Period; meId: string; pros: Player[] },
+  opts: LeaderboardOptions & { meId: string; pros: Player[] },
 ): Promise<LeaderboardEntry[]> {
   const profiles = await getProfiles(profileIds);
-  const rows: { player: Player; kind: LeaderboardKind }[] = profiles.map((p) => ({
-    player: p.player,
-    kind: p.id === opts.meId ? "me" : "member",
-  }));
-  const seen = new Set(rows.map((r) => r.player.epic_id));
-  for (const pro of opts.pros) if (!seen.has(pro.epic_id)) rows.push({ player: pro, kind: "pro" });
-
-  const metric = METRICS[opts.metric];
-  let snapshots = new Map<string, SnapshotRow[]>();
-  let cutoff = "";
-  if (opts.period !== "lifetime") {
-    cutoff = daysAgo(PERIOD_DAYS[opts.period]);
-    snapshots = await getSnapshotsForPeriod(
-      rows.map((r) => r.player.epic_id),
-      opts.mode,
-    );
-  }
-
-  const entries = rows.map(({ player, kind }) => {
-    // Period gains are tracked for "all inputs" only.
-    const input = opts.period === "lifetime" ? opts.input : "all";
-    let totals = totalsFromStats(getModeStats(player.latest_stats, input, opts.mode));
-    if (opts.period !== "lifetime") {
-      const base = baselineFor(snapshots.get(player.epic_id) ?? [], cutoff);
-      totals = base ? subtractTotals(totals, base) : totalsFromStats(null);
-    }
-    return {
-      player: { epic_id: player.epic_id, epic_name: player.epic_name, avatar_hue: player.avatar_hue },
-      kind,
-      totals,
-      value: metric.get(totals),
-      hasData: totals.matches > 0,
-    };
-  });
-
-  return entries.sort((a, b) => Number(b.hasData) - Number(a.hasData) || b.value - a.value);
+  const rows = leaderboardRows(
+    profiles.map((p) => ({ player: p.player, isMe: p.id === opts.meId })),
+    opts.pros,
+  );
+  const snapshots =
+    opts.period === "lifetime"
+      ? new Map<string, SnapshotRow[]>()
+      : await getSnapshotsForPeriod(
+          rows.map((r) => r.player.epic_id),
+          opts.mode,
+        );
+  return rankPlayers(rows, snapshots, opts);
 }
 
 /** Gains over the last `days` days for one player (overall, all inputs). */
 export async function getRecentGains(player: Player, days: number) {
-  const cutoff = daysAgo(days);
   const rows = await getSnapshotsForPeriod([player.epic_id], "overall");
-  const base = baselineFor(rows.get(player.epic_id) ?? [], cutoff);
-  const current = totalsFromStats(getModeStats(player.latest_stats, "all", "overall"));
-  return base ? subtractTotals(current, base) : null;
+  return recentGains(player, rows.get(player.epic_id) ?? [], days);
 }

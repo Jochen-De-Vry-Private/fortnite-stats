@@ -1,4 +1,4 @@
-import { BarChart3, Trophy, UsersRound, Zap } from "lucide-react";
+import { BarChart3, Swords, Trophy, UsersRound, Zap } from "lucide-react";
 import { Logo } from "@/components/app-nav";
 import { ButtonLink } from "@/components/ui";
 import { APP_TAGLINE } from "@/lib/config";
@@ -7,6 +7,7 @@ const FEATURES = [
   { icon: BarChart3, title: "Every stat", text: "Wins, K/D, win rate, elims. Split by mode and by controller, keyboard or touch.", color: "text-rare" },
   { icon: Zap, title: "Auto-updated daily", text: "We pull your stats every day so you can see your progress over time.", color: "text-legendary" },
   { icon: UsersRound, title: "Friends & groups", text: "Add your squad, build crews and see who's really carrying.", color: "text-uncommon" },
+  { icon: Swords, title: "Compare with pros", text: "Go head-to-head with any player, pros included. Follow them to race them on your leaderboard.", color: "text-mythic" },
   { icon: Trophy, title: "Leaderboards", text: "Lifetime or this week. Climb the ranks in your friend group.", color: "text-epic" },
 ];
 
@@ -40,7 +41,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map(({ icon: Icon, title, text, color }) => (
             <div key={title} className="rounded-2xl border border-line bg-panel/80 p-5">
               <Icon className={`mb-3 size-7 ${color}`} />

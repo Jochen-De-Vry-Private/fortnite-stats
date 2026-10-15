@@ -11,8 +11,12 @@ const PODIUM = [
   { place: 3, ring: "ring-amber-600", bar: "from-amber-600/80 to-amber-900/40 h-14", label: "text-amber-500" },
 ];
 
-export function Leaderboard({ entries, metric }: { entries: LeaderboardEntry[]; metric: MetricKey }) {
+export function Leaderboard({ entries, metric, demo }: { entries: LeaderboardEntry[]; metric: MetricKey; demo?: boolean }) {
   const m = METRICS[metric];
+  const hrefFor = (e: LeaderboardEntry) =>
+    demo
+      ? e.kind === "me" ? "/demo" : `/demo/player/${e.player.epic_id}`
+      : e.kind === "me" ? "/dashboard" : `/player/${e.player.epic_id}`;
   const top = entries.slice(0, 3);
 
   return (
@@ -23,7 +27,7 @@ export function Leaderboard({ entries, metric }: { entries: LeaderboardEntry[]; 
             const e = top[place - 1];
             if (!e) return <div key={place} />;
             return (
-              <Link key={place} href={e.kind === "me" ? "/dashboard" : `/player/${e.player.epic_id}`} className="group flex flex-col items-center text-center">
+              <Link key={place} href={hrefFor(e)} className="group flex flex-col items-center text-center">
                 {place === 1 && <Crown className="mb-1 size-7 fill-yellow-300 text-yellow-300 drop-shadow-[0_0_10px_rgb(253_224_71/0.7)]" />}
                 <Avatar
                   name={e.player.epic_name}
@@ -46,7 +50,7 @@ export function Leaderboard({ entries, metric }: { entries: LeaderboardEntry[]; 
         {entries.map((e, i) => (
           <li key={e.player.epic_id}>
             <Link
-              href={e.kind === "me" ? "/dashboard" : `/player/${e.player.epic_id}`}
+              href={hrefFor(e)}
               className={clsx(
                 "flex items-center gap-3 rounded-2xl border p-3 transition hover:border-violet-400/60",
                 e.kind === "me"

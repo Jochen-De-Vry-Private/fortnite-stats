@@ -8,7 +8,7 @@ import { signOut } from "@/app/actions/auth";
 import { APP_NAME } from "@/lib/config";
 import { Avatar } from "./avatar";
 
-const ITEMS = [
+const APP_ITEMS = [
   { href: "/dashboard", label: "Stats", icon: Home },
   { href: "/friends", label: "Friends", icon: UserPlus },
   { href: "/compare", label: "Compare", icon: Swords },
@@ -16,9 +16,28 @@ const ITEMS = [
   { href: "/groups", label: "Groups", icon: UsersRound },
 ];
 
-export function AppNav({ name, hue, pendingRequests }: { name: string; hue: number; pendingRequests: number }) {
+// The public demo mirrors the app under /demo.
+const DEMO_ITEMS = APP_ITEMS.map((item) => ({
+  ...item,
+  href: item.href === "/dashboard" ? "/demo" : `/demo${item.href}`,
+}));
+
+export function AppNav({
+  name,
+  hue,
+  pendingRequests,
+  demo,
+}: {
+  name: string;
+  hue: number;
+  pendingRequests: number;
+  demo?: boolean;
+}) {
   const pathname = usePathname();
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const ITEMS = demo ? DEMO_ITEMS : APP_ITEMS;
+  const home = demo ? "/demo" : "/dashboard";
+  const friendsHref = demo ? "/demo/friends" : "/friends";
+  const isActive = (href: string) => pathname === href || (href !== "/demo" && pathname.startsWith(`${href}/`));
 
   return (
     <>
@@ -37,23 +56,32 @@ export function AppNav({ name, hue, pendingRequests }: { name: string; hue: numb
               >
                 <Icon className="size-4" />
                 {label}
-                {href === "/friends" && pendingRequests > 0 && <Dot count={pendingRequests} />}
+                {href === friendsHref && pendingRequests > 0 && <Dot count={pendingRequests} />}
               </Link>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2 md:ml-0">
-            <Link href="/dashboard" className="flex items-center gap-2" aria-label="My stats">
+            <Link href={home} className={clsx("items-center gap-2", demo ? "hidden sm:flex" : "flex")} aria-label="My stats">
               <Avatar name={name} hue={hue} size="sm" />
             </Link>
-            <form action={signOut}>
-              <button
-                className="grid size-9 place-items-center rounded-xl text-muted transition hover:bg-white/5 hover:text-white"
-                aria-label="Sign out"
-                title="Sign out"
+            {demo ? (
+              <Link
+                href="/signup"
+                className="whitespace-nowrap rounded-xl bg-gradient-to-b from-yellow-300 to-amber-500 px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-950 shadow-[0_3px_0_0_#b45309]"
               >
-                <LogOut className="size-4" />
-              </button>
-            </form>
+                Track yours
+              </Link>
+            ) : (
+              <form action={signOut}>
+                <button
+                  className="grid size-9 place-items-center rounded-xl text-muted transition hover:bg-white/5 hover:text-white"
+                  aria-label="Sign out"
+                  title="Sign out"
+                >
+                  <LogOut className="size-4" />
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </header>
@@ -72,8 +100,13 @@ export function AppNav({ name, hue, pendingRequests }: { name: string; hue: numb
                 )}
               >
                 <span className="relative">
-                  <Icon className={clsx("size-6 transition", active && "scale-110 drop-shadow-[0_0_8px_rgb(253_224_71/0.6)]")} />
-                  {href === "/friends" && pendingRequests > 0 && (
+                  <Icon
+                    className={clsx(
+                      "size-6 transition",
+                      active && "scale-110 drop-shadow-[0_0_8px_rgb(253_224_71/0.6)]",
+                    )}
+                  />
+                  {href === friendsHref && pendingRequests > 0 && (
                     <span className="absolute -right-2 -top-1">
                       <Dot count={pendingRequests} />
                     </span>
