@@ -43,12 +43,13 @@ function EpicNameField({ defaultValue }: { defaultValue?: string }) {
   );
 }
 
-export function SignUpForm() {
+export function SignUpForm({ invite }: { invite?: string }) {
   const [state, action] = useActionState(signUp, undefined);
   if (state?.message) return <Alert kind="success">{state.message}</Alert>;
 
   return (
     <form action={action} className="space-y-4">
+      {invite && <input type="hidden" name="invite" value={invite} />}
       <EpicNameField />
       <AccountTypeSelect />
       <div>

@@ -233,7 +233,7 @@ function WeeklyStrip({ weekly }: { weekly: Totals }) {
   );
 }
 
-function ModeTabs({ modes, value, onChange }: { modes: Mode[]; value: Mode; onChange: (m: Mode) => void }) {
+export function ModeTabs({ modes, value, onChange }: { modes: Mode[]; value: Mode; onChange: (m: Mode) => void }) {
   return (
     <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-2xl border border-line bg-panel p-1">
       {modes.map((m) => (

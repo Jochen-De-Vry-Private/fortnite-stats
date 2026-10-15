@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import { Star } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import { INPUT_LABELS, MODE_LABELS, type Input, type Mode } from "@/lib/fortnite/types";
@@ -16,6 +17,8 @@ export function LeaderboardFilters({
   input,
   period,
   hideScope,
+  showPros,
+  hasPros,
 }: {
   scopes: Option[];
   scope: string;
@@ -24,6 +27,8 @@ export function LeaderboardFilters({
   input: Input;
   period: Period;
   hideScope?: boolean;
+  showPros: boolean;
+  hasPros: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -40,6 +45,21 @@ export function LeaderboardFilters({
     <div className={clsx("space-y-3 transition-opacity", pending && "opacity-60")}>
       {!hideScope && scopes.length > 1 && (
         <Chips options={scopes} value={scope} onChange={(v) => set("scope", v)} />
+      )}
+      {hasPros && (
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-line bg-panel px-3 py-2.5">
+          <span className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Star className="size-4 fill-sky-300 text-sky-300" /> Show players I follow
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={showPros}
+            onChange={(e) => set("pros", e.target.checked ? "1" : "0")}
+            className="peer sr-only"
+          />
+          <span className="relative h-6 w-11 rounded-full bg-white/15 transition after:absolute after:left-0.5 after:top-0.5 after:size-5 after:rounded-full after:bg-white after:transition peer-checked:bg-sky-500 peer-checked:after:translate-x-5 peer-focus-visible:ring-2 peer-focus-visible:ring-sky-300" />
+        </label>
       )}
       <Chips
         options={(Object.keys(METRICS) as MetricKey[]).map((k) => ({ value: k, label: METRICS[k].short }))}

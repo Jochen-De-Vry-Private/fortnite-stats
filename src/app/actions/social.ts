@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isUuid } from "@/lib/stats";
-import { createClient, getUser } from "@/lib/supabase/server";
+import { applyInvite } from "@/lib/invites";
+import { createAdminClient, createClient, getUser } from "@/lib/supabase/server";
 
 async function requireUser(...ids: unknown[]) {
   // Action arguments come from the client, and some end up in PostgREST filters.
@@ -99,4 +100,12 @@ export async function deleteGroup(groupId: string) {
   const supabase = await createClient();
   await supabase.from("groups").delete().eq("id", groupId);
   redirect("/groups");
+}
+
+/** "Add as friend" button on someone's invite page, for users who already have an account. */
+export async function acceptInvite(code: string) {
+  const user = await requireUser();
+  const inviter = await applyInvite(createAdminClient(), user.id, code);
+  revalidatePath("/", "layout");
+  redirect(inviter ? "/friends?invited=1" : "/friends");
 }

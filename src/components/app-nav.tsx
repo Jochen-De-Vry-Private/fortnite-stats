@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Home, LogOut, Trophy, UserPlus, UsersRound } from "lucide-react";
+import { Home, LogOut, Swords, Trophy, UserPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
@@ -11,6 +11,7 @@ import { Avatar } from "./avatar";
 const ITEMS = [
   { href: "/dashboard", label: "Stats", icon: Home },
   { href: "/friends", label: "Friends", icon: UserPlus },
+  { href: "/compare", label: "Compare", icon: Swords },
   { href: "/leaderboards", label: "Ranks", icon: Trophy },
   { href: "/groups", label: "Groups", icon: UsersRound },
 ];
@@ -58,7 +59,7 @@ export function AppNav({ name, hue, pendingRequests }: { name: string; hue: numb
       </header>
 
       <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#0e0a1d]/95 backdrop-blur-lg md:hidden">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {ITEMS.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
@@ -66,7 +67,7 @@ export function AppNav({ name, hue, pendingRequests }: { name: string; hue: numb
                 key={href}
                 href={href}
                 className={clsx(
-                  "relative flex flex-col items-center gap-1 pt-2.5 pb-1 text-[11px] font-bold uppercase tracking-wide",
+                  "relative flex flex-col items-center gap-1 pt-2.5 pb-1 text-[10px] font-bold uppercase tracking-wide",
                   active ? "text-yellow-300" : "text-muted",
                 )}
               >

@@ -13,7 +13,7 @@ export type Totals = {
 };
 
 export type SnapshotRow = {
-  profile_id: string;
+  epic_id: string;
   snapshot_date: string;
   mode: Mode;
   score: number;
@@ -77,7 +77,7 @@ export function getModeStats(stats: AllStats | null | undefined, input: Input, m
 }
 
 /** Snapshot rows to write for a fresh API response (input "all" only). */
-export function snapshotRowsFromStats(profileId: string, stats: AllStats, date: string): SnapshotRow[] {
+export function snapshotRowsFromStats(epicId: string, stats: AllStats, date: string): SnapshotRow[] {
   const all = stats.all;
   if (!all) return [];
   return (Object.keys(all) as Mode[])
@@ -85,7 +85,7 @@ export function snapshotRowsFromStats(profileId: string, stats: AllStats, date: 
     .map((mode) => {
       const t = totalsFromStats(all[mode]);
       return {
-        profile_id: profileId,
+        epic_id: epicId,
         snapshot_date: date,
         mode,
         score: t.score,
@@ -112,7 +112,7 @@ export function daysAgo(n: number) {
 /**
  * Totals at the start of a period: the last snapshot on or before the cutoff,
  * or (for players who joined later) their first snapshot.
- * `rows` must be one profile + one mode, sorted by date ascending.
+ * `rows` must be one player + one mode, sorted by date ascending.
  */
 export function baselineFor(rows: SnapshotRow[], cutoff: string): Totals | null {
   if (rows.length === 0) return null;
@@ -126,7 +126,7 @@ export function baselineFor(rows: SnapshotRow[], cutoff: string): Totals | null 
 
 export type TrendPoint = { date: string; wins: number; kills: number; matches: number; kd: number };
 
-/** Per-active-day gains from consecutive snapshots of one profile + mode (sorted ascending). */
+/** Per-active-day gains from consecutive snapshots of one player + mode (sorted ascending). */
 export function trendFromSnapshots(rows: SnapshotRow[]): TrendPoint[] {
   const points: TrendPoint[] = [];
   for (let i = 1; i < rows.length; i++) {
@@ -227,4 +227,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export function isUuid(v: unknown): v is string {
   return typeof v === "string" && UUID_RE.test(v);
+}
+
+const EPIC_ID_RE = /^[0-9a-f]{32}$/;
+
+export function isEpicId(v: unknown): v is string {
+  return typeof v === "string" && EPIC_ID_RE.test(v);
 }

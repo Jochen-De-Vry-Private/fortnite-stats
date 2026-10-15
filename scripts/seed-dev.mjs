@@ -1,6 +1,8 @@
-// LOCAL DEVELOPMENT ONLY: creates fake players with 40 days of stat history,
-// befriends them with every existing real profile and puts everyone in a group.
+// LOCAL DEVELOPMENT ONLY: creates fake players with 40 days of stat history.
+// Fake app users are befriended with every real profile and put in a group;
+// fake "pros" (no app account) are followed by every real profile.
 // Run: npm run seed:dev
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,6 +18,8 @@ const FAKES = [
   { name: "BushCamper99", skill: 0.8, wins: 0.03, pace: 12 },
   { name: "CrankItCarl", skill: 2.1, wins: 0.06, pace: 4 },
   { name: "ZeroBuildZoe", skill: 4.8, wins: 0.15, pace: 7 },
+  { name: "ProBoxMaster", skill: 6.5, wins: 0.24, pace: 14, pro: true },
+  { name: "CashCupKing", skill: 5.2, wins: 0.19, pace: 11, pro: true },
 ];
 
 const MODE_SPLIT = { solo: 0.15, duo: 0.2, squad: 0.1, ltm: 0.55 };
@@ -35,23 +39,20 @@ function modeStats(t) {
 
 const day = (n) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
 
-const { data: realProfiles } = await admin.from("profiles").select("id, epic_name").not("epic_id", "like", "fake-%");
-const fakeIds = [];
+const epicIdFor = (name) => createHash("md5").update(`fake:${name}`).digest("hex");
+const fakeEpicIds = new Set(FAKES.map((f) => epicIdFor(f.name)));
+
+const { data: allProfiles } = await admin.from("profiles").select("id, epic_id, player:players!profiles_epic_id_fkey!inner(epic_name)");
+const realProfiles = (allProfiles ?? []).filter((p) => !fakeEpicIds.has(p.epic_id));
+const fakeUserIds = [];
+const proEpicIds = [];
 
 for (const [i, f] of FAKES.entries()) {
-  const email = `${f.name.toLowerCase()}@dropstats.test`;
-  const { data: list } = await admin.auth.admin.listUsers();
-  let user = list.users.find((u) => u.email === email);
-  if (!user) {
-    const { data, error } = await admin.auth.admin.createUser({ email, password: "localtest-pass-1", email_confirm: true });
-    if (error) throw error;
-    user = data.user;
-  }
-  fakeIds.push(user.id);
+  const epicId = epicIdFor(f.name);
 
   // Build 40 days of cumulative totals per mode.
   const totals = Object.fromEntries(Object.keys(MODE_SPLIT).map((m) => [m, { score: 0, wins: 0, kills: 0, deaths: 0, matches: 0, minutesPlayed: 0, playersOutlived: 0 }]));
-  const base = 200 + i * 150;
+  const base = (f.pro ? 2500 : 200) + i * 150;
   for (const m in totals) {
     const t = totals[m];
     t.matches = Math.round(base * MODE_SPLIT[m] * 4);
@@ -63,6 +64,7 @@ for (const [i, f] of FAKES.entries()) {
     t.playersOutlived = t.matches * 40;
   }
   const rows = [];
+  let latest;
   for (let d = 40; d >= 0; d--) {
     if (rand() > 0.6 && d !== 0) continue; // not every day is a gaming day
     for (const m in totals) {
@@ -78,31 +80,54 @@ for (const [i, f] of FAKES.entries()) {
       return a;
     }, {});
     for (const [m, t] of [...Object.entries(totals), ["overall", overall]]) {
-      rows.push({ profile_id: user.id, snapshot_date: day(d), mode: m, score: t.score, wins: t.wins, kills: t.kills, deaths: t.deaths, matches: t.matches, minutes_played: t.minutesPlayed, players_outlived: t.playersOutlived });
+      rows.push({ epic_id: epicId, snapshot_date: day(d), mode: m, score: t.score, wins: t.wins, kills: t.kills, deaths: t.deaths, matches: t.matches, minutes_played: t.minutesPlayed, players_outlived: t.playersOutlived });
     }
     if (d === 0) {
-      var latest = { all: { overall: modeStats(overall), ...Object.fromEntries(Object.entries(totals).map(([m, t]) => [m, modeStats(t)])) } };
+      latest = { all: { overall: modeStats(overall), ...Object.fromEntries(Object.entries(totals).map(([m, t]) => [m, modeStats(t)])) } };
     }
   }
 
-  await admin.from("profiles").upsert({
-    id: user.id, epic_id: `fake-${f.name}`, epic_name: f.name, battle_pass_level: 20 + i * 17, battle_pass_progress: (i * 23) % 100,
+  const { error: playerError } = await admin.from("players").upsert({
+    epic_id: epicId, epic_name: f.name, battle_pass_level: 20 + i * 17, battle_pass_progress: (i * 23) % 100,
     latest_stats: latest, last_synced_at: new Date().toISOString(),
   });
-  await admin.from("stat_snapshots").delete().eq("profile_id", user.id);
-  await admin.from("stat_snapshots").insert(rows);
+  if (playerError) throw playerError;
+  await admin.from("stat_snapshots").delete().eq("epic_id", epicId);
+  const { error: snapError } = await admin.from("stat_snapshots").insert(rows);
+  if (snapError) throw snapError;
+
+  if (f.pro) {
+    proEpicIds.push(epicId);
+    continue;
+  }
+
+  const email = `${f.name.toLowerCase()}@dropstats.test`;
+  const { data: list } = await admin.auth.admin.listUsers();
+  let user = list.users.find((u) => u.email === email);
+  if (!user) {
+    const { data, error } = await admin.auth.admin.createUser({ email, password: "localtest-pass-1", email_confirm: true });
+    if (error) throw error;
+    user = data.user;
+  }
+  const { error: profileError } = await admin.from("profiles").upsert({ id: user.id, epic_id: epicId });
+  if (profileError) throw profileError;
+  fakeUserIds.push(user.id);
 }
 
-for (const p of realProfiles ?? []) {
-  // Accepted friendships with the first 4 fakes; the last one sends a pending request.
-  for (const [i, id] of fakeIds.entries()) {
-    await admin.from("friendships").upsert(
-      { requester_id: id, addressee_id: p.id, status: i < 4 ? "accepted" : "pending" },
-      { onConflict: "requester_id,addressee_id" },
-    );
+for (const p of realProfiles) {
+  // Accepted friendships with the first 4 fake users; the last one sends a pending request.
+  for (const [i, id] of fakeUserIds.entries()) {
+    await admin.from("friendships").delete().or(`and(requester_id.eq.${id},addressee_id.eq.${p.id}),and(requester_id.eq.${p.id},addressee_id.eq.${id})`);
+    await admin.from("friendships").insert({ requester_id: id, addressee_id: p.id, status: i < 4 ? "accepted" : "pending" });
   }
-  const { data: g } = await admin.from("groups").insert({ name: "Tilted Towers Crew", emoji: "🔥", owner_id: p.id }).select("id").single();
-  await admin.from("group_members").insert([p.id, ...fakeIds.slice(0, 3)].map((profile_id) => ({ group_id: g.id, profile_id })));
-  console.log(`Seeded friends + group for ${p.epic_name}`);
+  for (const epicId of proEpicIds) {
+    await admin.from("follows").upsert({ profile_id: p.id, epic_id: epicId }, { onConflict: "profile_id,epic_id" });
+  }
+  const { data: existing } = await admin.from("groups").select("id").eq("owner_id", p.id).eq("name", "Tilted Towers Crew").maybeSingle();
+  if (!existing) {
+    const { data: g } = await admin.from("groups").insert({ name: "Tilted Towers Crew", emoji: "🔥", owner_id: p.id }).select("id").single();
+    await admin.from("group_members").insert([p.id, ...fakeUserIds.slice(0, 3)].map((profile_id) => ({ group_id: g.id, profile_id })));
+  }
+  console.log(`Seeded friends, follows + group for ${p.player.epic_name}`);
 }
-console.log(`Seeded ${FAKES.length} fake players (password: localtest-pass-1)`);
+console.log(`Seeded ${fakeUserIds.length} fake users and ${proEpicIds.length} fake pros (password: localtest-pass-1)`);

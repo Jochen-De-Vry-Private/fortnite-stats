@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./env";
 
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/demo", "/auth", "/api/cron", "/offline"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/demo", "/auth", "/api/cron", "/offline", "/invite"];
 
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || (p !== "/" && pathname.startsWith(`${p}/`)));
@@ -11,8 +12,8 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
@@ -39,7 +40,8 @@ export async function updateSession(request: NextRequest) {
   }
   if (user && (pathname === "/" || pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    const invite = request.nextUrl.searchParams.get("invite");
+    url.pathname = invite ? `/invite/${encodeURIComponent(invite)}` : "/dashboard";
     url.search = "";
     return NextResponse.redirect(url);
   }

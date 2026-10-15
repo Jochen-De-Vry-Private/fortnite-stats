@@ -3,13 +3,14 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./env";
 
 // Acts as the signed-in user; row-level security applies.
 export async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
         getAll: () => cookieStore.getAll(),
@@ -30,8 +31,8 @@ export async function createClient() {
 // after validation and the daily sync.
 export function createAdminClient() {
   return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
+    SUPABASE_URL,
+    process.env.SUPABASE_SECRET_KEY!.trim(),
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 }

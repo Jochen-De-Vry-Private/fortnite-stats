@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { fetchStatsByName } from "@/lib/fortnite/api";
 import type { AccountType, FortniteStatsData } from "@/lib/fortnite/types";
 import { createAdminClient, createClient, getUser } from "@/lib/supabase/server";
+import { applyInvite } from "@/lib/invites";
 import { saveStats } from "@/lib/sync";
 
 export type FormState = { error?: string; message?: string } | undefined;
@@ -29,25 +30,35 @@ async function lookupUnclaimedAccount(
   if (!result.ok) return { error: result.message };
 
   const admin = createAdminClient();
-  const { data: existing } = await admin
+  const { data: existing, error } = await admin
     .from("profiles")
     .select("id")
     .eq("epic_id", result.data.account.id)
     .maybeSingle();
+  if (error) {
+    console.error("profile lookup failed", error);
+    return { error: "Our database isn't reachable right now. Try again later." };
+  }
   if (existing) return { error: `${result.data.account.name} is already linked to another account.` };
   return { data: result.data };
 }
 
-async function linkAccount(userId: string, data: FortniteStatsData) {
+async function linkAccount(userId: string, data: FortniteStatsData, inviteCode?: string) {
   const admin = createAdminClient();
-  const { error } = await admin
-    .from("profiles")
-    .insert({ id: userId, epic_id: data.account.id, epic_name: data.account.name });
+  // The player row may already exist (e.g. someone looked them up on Compare).
+  const { data: existing } = await admin
+    .from("players")
+    .select("latest_stats")
+    .eq("epic_id", data.account.id)
+    .maybeSingle();
+  await saveStats(admin, existing?.latest_stats ?? null, data);
+
+  const { error } = await admin.from("profiles").insert({ id: userId, epic_id: data.account.id });
   if (error) {
     if (error.code === "23505") return `${data.account.name} is already linked to another account.`;
     throw error;
   }
-  await saveStats(admin, { id: userId, epic_id: data.account.id, latest_stats: null }, data);
+  if (inviteCode) await applyInvite(admin, userId, inviteCode);
   return null;
 }
 
@@ -61,6 +72,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
   const password = String(formData.get("password") ?? "");
   const epicName = String(formData.get("epicName") ?? "").trim();
   const accountType = readAccountType(formData);
+  const inviteCode = String(formData.get("invite") ?? "").trim() || undefined;
 
   if (!email || !password) return { error: "Email and password are required." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
@@ -75,7 +87,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
     options: {
       emailRedirectTo: `${await siteOrigin()}/auth/callback`,
       // Remembered so onboarding can prefill the name after email confirmation.
-      data: { epic_name: lookup.data.account.name, account_type: accountType },
+      data: { epic_name: lookup.data.account.name, account_type: accountType, invite_code: inviteCode },
     },
   });
   if (error) return { error: error.message };
@@ -85,7 +97,7 @@ export async function signUp(_prev: FormState, formData: FormData): Promise<Form
     return { message: "Almost there! Check your email and click the link to activate your account." };
   }
 
-  const linkError = await linkAccount(data.user.id, lookup.data);
+  const linkError = await linkAccount(data.user.id, lookup.data, inviteCode);
   if (linkError) return { error: linkError };
   redirect("/dashboard");
 }
@@ -100,7 +112,8 @@ export async function linkEpicAccount(_prev: FormState, formData: FormData): Pro
   );
   if ("error" in lookup) return { error: lookup.error };
 
-  const linkError = await linkAccount(user.id, lookup.data);
+  // Invite from a sign-up that needed email confirmation first.
+  const linkError = await linkAccount(user.id, lookup.data, user.user_metadata?.invite_code);
   if (linkError) return { error: linkError };
   redirect("/dashboard");
 }

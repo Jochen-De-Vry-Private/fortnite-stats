@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Crown } from "lucide-react";
+import { Crown, Star } from "lucide-react";
 import Link from "next/link";
 import type { LeaderboardEntry } from "@/lib/data";
 import { METRICS, type MetricKey } from "@/lib/stats";
@@ -11,7 +11,7 @@ const PODIUM = [
   { place: 3, ring: "ring-amber-600", bar: "from-amber-600/80 to-amber-900/40 h-14", label: "text-amber-500" },
 ];
 
-export function Leaderboard({ entries, metric, meId }: { entries: LeaderboardEntry[]; metric: MetricKey; meId: string }) {
+export function Leaderboard({ entries, metric }: { entries: LeaderboardEntry[]; metric: MetricKey }) {
   const m = METRICS[metric];
   const top = entries.slice(0, 3);
 
@@ -23,15 +23,15 @@ export function Leaderboard({ entries, metric, meId }: { entries: LeaderboardEnt
             const e = top[place - 1];
             if (!e) return <div key={place} />;
             return (
-              <Link key={place} href={`/player/${e.profile.id}`} className="group flex flex-col items-center text-center">
+              <Link key={place} href={e.kind === "me" ? "/dashboard" : `/player/${e.player.epic_id}`} className="group flex flex-col items-center text-center">
                 {place === 1 && <Crown className="mb-1 size-7 fill-yellow-300 text-yellow-300 drop-shadow-[0_0_10px_rgb(253_224_71/0.7)]" />}
                 <Avatar
-                  name={e.profile.epic_name}
-                  hue={e.profile.avatar_hue}
+                  name={e.player.epic_name}
+                  hue={e.player.avatar_hue}
                   size={place === 1 ? "lg" : "md"}
                   className={clsx("ring-4 transition group-hover:scale-105", ring)}
                 />
-                <div className="mt-2 w-full truncate text-sm font-bold text-white">{e.profile.epic_name}</div>
+                <div className="mt-2 w-full truncate text-sm font-bold text-white">{e.player.epic_name}</div>
                 <div className={clsx("font-display text-2xl sm:text-3xl", label)}>{e.hasData ? m.format(e.value) : "–"}</div>
                 <div className={clsx("mt-2 grid w-full place-items-center rounded-t-xl bg-gradient-to-b", bar)}>
                   <span className="font-display text-3xl text-white/90 text-stroke">{place}</span>
@@ -44,12 +44,16 @@ export function Leaderboard({ entries, metric, meId }: { entries: LeaderboardEnt
 
       <ol className="space-y-2">
         {entries.map((e, i) => (
-          <li key={e.profile.id}>
+          <li key={e.player.epic_id}>
             <Link
-              href={`/player/${e.profile.id}`}
+              href={e.kind === "me" ? "/dashboard" : `/player/${e.player.epic_id}`}
               className={clsx(
                 "flex items-center gap-3 rounded-2xl border p-3 transition hover:border-violet-400/60",
-                e.profile.id === meId ? "border-yellow-300/60 bg-yellow-300/10" : "border-line bg-panel/80",
+                e.kind === "me"
+                  ? "border-yellow-300/60 bg-yellow-300/10"
+                  : e.kind === "pro"
+                    ? "border-dashed border-sky-400/40 bg-sky-400/5"
+                    : "border-line bg-panel/80",
               )}
             >
               <span
@@ -60,10 +64,15 @@ export function Leaderboard({ entries, metric, meId }: { entries: LeaderboardEnt
               >
                 {i + 1}
               </span>
-              <Avatar name={e.profile.epic_name} hue={e.profile.avatar_hue} size="sm" />
+              <Avatar name={e.player.epic_name} hue={e.player.avatar_hue} size="sm" />
               <span className="min-w-0 flex-1 truncate font-bold text-white">
-                {e.profile.epic_name}
-                {e.profile.id === meId && <span className="ml-2 text-xs font-bold uppercase text-yellow-300">You</span>}
+                {e.player.epic_name}
+                {e.kind === "me" && <span className="ml-2 text-xs font-bold uppercase text-yellow-300">You</span>}
+                {e.kind === "pro" && (
+                  <span className="ml-2 inline-flex items-center gap-0.5 text-xs font-bold uppercase text-sky-300">
+                    <Star className="size-3 fill-sky-300" /> Followed
+                  </span>
+                )}
               </span>
               <span className="text-right">
                 <span className="block text-lg font-extrabold tabular-nums text-white">{e.hasData ? m.format(e.value) : "–"}</span>

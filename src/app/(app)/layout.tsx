@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      <AppNav name={profile.epic_name} hue={profile.avatar_hue} pendingRequests={incoming.length} />
+      <AppNav name={profile.player.epic_name} hue={profile.player.avatar_hue} pendingRequests={incoming.length} />
       <main className="mx-auto max-w-5xl px-4 pt-5 pb-28 md:pb-12">{children}</main>
     </>
   );

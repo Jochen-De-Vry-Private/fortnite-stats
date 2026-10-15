@@ -8,7 +8,7 @@ import { Leaderboard } from "@/components/leaderboard";
 import { LeaderboardFilters } from "@/components/leaderboard-filters";
 import { PlayerRow } from "@/components/player-row";
 import { Card, SectionTitle } from "@/components/ui";
-import { buildLeaderboard, getFriendships, getGroup, getMyProfile, getProfiles } from "@/lib/data";
+import { buildLeaderboard, getFollowedPlayers, getFriendships, getGroup, getMyProfile, getProfiles } from "@/lib/data";
 import { parseLeaderboardParams, type LeaderboardSearchParams } from "@/lib/leaderboard-params";
 import { isUuid } from "@/lib/stats";
 
@@ -28,13 +28,14 @@ export default async function GroupPage({ params, searchParams }: Props) {
   if (!data) notFound();
   const { group, memberIds } = data;
   const isOwner = group.owner_id === me.id;
-  const opts = parseLeaderboardParams(await searchParams);
+  const { showPros, ...opts } = parseLeaderboardParams(await searchParams);
 
-  const [entries, members, { friends }] = await Promise.all([
-    buildLeaderboard(memberIds, opts),
+  const [followed, members, { friends }] = await Promise.all([
+    getFollowedPlayers(),
     getProfiles(memberIds),
     getFriendships(me.id),
   ]);
+  const entries = await buildLeaderboard(memberIds, { ...opts, meId: me.id, pros: showPros ? followed : [] });
   const addable = await getProfiles(friends.filter((f) => !memberIds.includes(f)));
 
   return (
@@ -60,8 +61,8 @@ export default async function GroupPage({ params, searchParams }: Props) {
 
       <section className="space-y-4">
         <SectionTitle>Leaderboard</SectionTitle>
-        <LeaderboardFilters scopes={[]} scope={group.id} hideScope {...opts} />
-        <Leaderboard entries={entries} metric={opts.metric} meId={me.id} />
+        <LeaderboardFilters scopes={[]} scope={group.id} hideScope {...opts} showPros={showPros} hasPros={followed.length > 0} />
+        <Leaderboard entries={entries} metric={opts.metric} />
       </section>
 
       <section>
@@ -70,7 +71,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
           {members.map((p) => (
             <PlayerRow
               key={p.id}
-              profile={p}
+              player={p.player}
               action={
                 p.id === group.owner_id ? (
                   <span className="rounded-full bg-yellow-300/15 px-2.5 py-1 text-[10px] font-bold uppercase text-yellow-300">
@@ -90,7 +91,7 @@ export default async function GroupPage({ params, searchParams }: Props) {
           <SectionTitle>Add friends</SectionTitle>
           <div className="space-y-2">
             {addable.map((p) => (
-              <PlayerRow key={p.id} profile={p} action={<AddToGroupButton groupId={group.id} profileId={p.id} />} />
+              <PlayerRow key={p.id} player={p.player} action={<AddToGroupButton groupId={group.id} profileId={p.id} />} />
             ))}
           </div>
         </Card>

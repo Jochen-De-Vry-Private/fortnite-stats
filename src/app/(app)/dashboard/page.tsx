@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "My stats" };
 export default async function DashboardPage() {
   const profile = await getMyProfile();
   if (!profile) redirect("/onboarding");
-  const view = await loadPlayerView(profile);
+  const view = await loadPlayerView(profile.player);
 
   return <StatsView {...view} actions={<RefreshButton />} />;
 }

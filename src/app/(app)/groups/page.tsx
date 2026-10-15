@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Groups" };
 
 export default async function GroupsPage() {
   const me = (await getMyProfile())!;
-  const groups = await getMyGroups(me.id);
+  const groups = await getMyGroups();
 
   return (
     <div className="space-y-8">

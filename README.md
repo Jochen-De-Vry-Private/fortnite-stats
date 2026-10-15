@@ -4,10 +4,11 @@ A progressive web app for tracking Fortnite Battle Royale stats with friends. It
 
 - **Sign up** with email + your Fortnite (Epic) name. The name is checked against fortnite-api.com and can be claimed by only one account.
 - **Dashboard**: lifetime stats per input (all, keyboard and mouse, controller, touch) and mode (overall, solo, duo, squad, LTM), a K/D rank badge, Battle Pass level, last-7-days gains and a progress chart.
-- **Friends**: search players, send, accept or decline requests, and view a friend's full profile.
+- **Friends**: find other DropStats users, send, accept or decline requests, or share a personal invite link (sign up through it and you're friends automatically).
+- **Compare**: look up any Fortnite player, pros included, and see a head-to-head against your own stats. Follow players to keep their daily history and optionally show them on your leaderboards.
 - **Groups**: create a crew, share its invite code, add friends, and use a per-group leaderboard.
-- **Leaderboards**: rank friends or a group by wins, K/D, win %, elims, matches and more, for lifetime, this week or this month.
-- **Daily sync**: a cron job refreshes every player once a day and stores a snapshot whenever their stats changed. The weekly and monthly numbers come from those snapshots.
+- **Leaderboards**: rank friends or a group by wins, K/D, win %, elims, matches and more, for lifetime, this week or this month. Followed players can be toggled on or off.
+- **Daily sync**: a cron job refreshes every app user and every followed player once a day, and stores a snapshot whenever their stats changed. The weekly and monthly numbers come from those snapshots.
 
 ## Stack
 
@@ -68,7 +69,7 @@ The service worker only runs in production builds (`npm run build && npm start`)
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Create the database tables. Either:
-   - **SQL editor**: paste the contents of `supabase/migrations/20261014000000_init.sql` and run it, or
+   - **SQL editor**: run each file in `supabase/migrations/` **once, in filename order** (paste the contents, click Run), or
    - **CLI**: run `npx supabase link --project-ref <ref>`, then `npx supabase db push`.
 3. **Authentication → URL Configuration**: set **Site URL** to your Vercel URL (e.g. `https://dropstats.vercel.app`) and add `https://dropstats.vercel.app/auth/callback` to **Redirect URLs**.
 4. **Email confirmation**: Supabase's built-in email sender only allows a handful of emails per hour. For a small friends app you can either:
@@ -107,6 +108,10 @@ $$);
 ```
 
 Players already synced in the last 20 hours are skipped, so extra calls are cheap.
+
+### Updating an existing deployment
+
+When a new file appears in `supabase/migrations/`, run it on your Supabase project (SQL editor or `npx supabase db push`) **before** pushing the code that needs it. Otherwise the deployed app will query tables that don't exist yet.
 
 ## Installing the app
 
